@@ -1,0 +1,62 @@
+---
+- hosts: localhost
+  gather_facts: no
+  tasks:
+    - name: Import EC2
+      import_tasks: aws_ec2.yml
+      tags: provision
+      when: aws_ec2_instances.instance[0] is not defined
+    - name: Get EC2 Info
+      import_tasks: aws_ec2_info.yml
+      tags:
+        - provision
+    - name: Import infrastructure
+      import_tasks: aws_infra.yml
+      tags: 
+        - provision
+      when: aws_vpcs is not defined
+    - name: Get VPC Info
+      import_tasks: aws_vpc_info.yml
+      tags:
+        - provision
+
+- hosts: aws_ec2
+  tasks:
+    - name: Wait For EC2
+      wait_for_connection:
+        timeout: 300
+    - name: Import app
+      import_tasks: deploy.yml
+      tags: provision
+    - name: Query database
+      mysql_query:
+        login_user: backend
+        login_password: password
+        login_db: example
+        query: SELECT * FROM item WHERE bcit_id = %s
+        positional_args:
+          - A01075902
+      register: mysql_select
+      tags: provision
+    - name: Create user
+      mysql_query:
+        login_unix_socket: /var/run/mysqld/mysqld.sock
+        login_user: backend
+        login_password: password
+        login_db: example
+        query: INSERT INTO item (bcit_id, name) VALUES (%s, %s)
+        positional_args:
+          - A01075902
+          - Luke_Lee
+      tags: provision
+      when:
+      - mysql_select.rowcount[0] == 0
+
+- hosts: localhost
+  tasks:
+    - name: URL Info
+      import_tasks: aws_ec2_url.yml
+      tags: info
+    - name: Destroy EC2
+      import_tasks: aws_ec2_terminate.yml
+      tags: destroy

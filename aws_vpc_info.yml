@@ -1,0 +1,24 @@
+---
+- name: VPC info
+  amazon.aws.ec2_vpc_net_info:
+    region: us-west-2
+    filters:
+      "tag:Name": ACIT4640_AUTO
+  register: aws_vpcs
+  when: aws_vpcs is not defined
+- name: get subnet info
+  amazon.aws.ec2_vpc_subnet_info:
+    region: us-west-2
+    filters:
+      "tag:Name": ACIT4640_SUBNET
+      vpc-id: "{{ aws_vpcs.vpcs[0].id }}"
+  register: aws_subnets
+  when: aws_subnets is not defined
+- name: get security group info
+  amazon.aws.ec2_group_info:
+    region: us-west-2
+    filters:
+      group-name: ACIT4640_SECGRP
+      vpc-id: "{{ aws_vpcs.vpcs[0].id }}"
+  register: aws_groups
+  when: aws_groups is not defined

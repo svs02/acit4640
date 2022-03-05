@@ -1,0 +1,47 @@
+---
+- name: Create AWS VPC
+  amazon.aws.ec2_vpc_net:
+          name: ACIT4640_AUTO
+          cidr_block: 10.100.0.0/16
+          region: us-west-2
+  register: aws_vpc_info
+- name: Make sure a subnet exists
+  amazon.aws.ec2_vpc_subnet:
+          cidr: 10.100.10.0/24
+          region: us-west-2
+          az: us-west-2a
+          vpc_id: "{{ aws_vpc_info.vpc.id }}"
+          tags:
+                  Name: ACIT4640_SUBNET
+  register: aws_subnet_info
+- name: Internet gateway
+  ec2_vpc_igw:
+      vpc_id: "{{ aws_vpc_info.vpc.id }}"
+      tags:
+              Name: ACIT4640_IGW
+  register: aws_igw_info
+- name: Route table
+  amazon.aws.ec2_vpc_route_table:
+          subnets:
+                  - "{{ aws_subnet_info.subnet.id }}"
+          routes:
+                  - dest: 0.0.0.0/0
+                    gateway_id: "{{ aws_igw_info.gateway_id }}"
+          vpc_id: "{{ aws_vpc_info.vpc.id }}"
+          tags:
+                  Name: ACIT4640_RTBL
+- name: Security group
+  amazon.aws.ec2_group:
+          name: ACIT4640_SECGRP
+          description: Security group for Week4 - SSH and HTTP wide open
+          vpc_id: "{{ aws_vpc_info.vpc.id }}"
+          rules:
+                  - proto: tcp
+                    ports:
+                            - 22
+                            - 80
+                    cidr_ip: 0.0.0.0/0
+         
+
+
+

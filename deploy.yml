@@ -1,0 +1,106 @@
+- name: Installing software
+  become: true
+  apt:
+    name:
+      - nginx
+      - unzip
+      - python3
+      - python3-pip
+      - libmysqlclient-dev
+      - mysql-server
+    update_cache: yes
+- name: adding backend user
+  become: true
+  user:
+    name: backend
+- name: download the code
+  get_url:
+    url: https://github.com/timoguic/acit4640-py-mysql/archive/refs/heads/master.zip
+    dest: /tmp/source.zip
+- name: create tmp directory for course code
+  file:
+    path: /tmp/code
+    state: directory
+
+- name: unzip the code archive
+  unarchive:
+    remote_src: yes
+    src: /tmp/source.zip
+    dest: /tmp/code
+- name: create a directory for frontend files
+  become: true
+  file:
+    path: /frontend
+    state: directory
+    owner: "{{ ansible_ssh_user }}"
+- name: set up frontend files
+  copy:
+    src: /tmp/code/acit4640-py-mysql-master/frontend/index.html
+    dest: /frontend/index.html
+    remote_src: yes
+
+- name: copy nginx.conf to instance
+  become: true
+  copy:
+    src: nginx-default
+    dest: /etc/nginx/sites-available/default
+- name: restart nginx
+  become: true
+  systemd:
+    name: nginx
+    state: restarted
+- name: create a directory for backend files
+  become: true
+  file:
+    path: /backend
+    state: directory
+    owner: backend
+- name: set up backend files
+  become: true
+  become_user: root
+  copy:
+    src: /tmp/code/acit4640-py-mysql-master/backend/
+    dest: /backend/
+    owner: "{{ ansible_ssh_user }}"
+    remote_src: yes
+- name: pip install python dependencies
+  become: true
+  pip:
+    requirements: /backend/requirements.txt
+- name: Install PyMySql
+  become: true
+  pip:
+    name: PyMySql
+    state: present
+- name: copy backend config file
+  become: true
+  copy:
+    src: backend-conf
+    dest: /backend/backend.conf
+
+- name: create backend database
+  become: true
+  mysql_db:
+    login_unix_socket: /var/run/mysqld/mysqld.sock
+    login_user: root
+    name: example
+- name: create mysql backend user
+  become: true
+  community.mysql.mysql_user:
+    login_unix_socket: /var/run/mysqld/mysqld.sock
+    login_user: root
+    name: backend
+    password: password
+    priv: "example.*:ALL,GRANT"
+    state: present
+- name: copy service file
+  become: true
+  copy:
+    src: backend.service
+    dest: /etc/systemd/system/backend.service
+- name: restart backend service
+  become: true
+  systemd:
+    name: backend
+    daemon_reload: yes
+    state: restarted

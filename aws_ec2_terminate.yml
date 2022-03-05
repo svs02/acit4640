@@ -1,0 +1,14 @@
+---
+    - name: EC2 instance
+      amazon.aws.ec2_instance_info:
+        region: us-west-2
+        filters:
+          instance-state-name: running
+          "tag:Name": ACIT4640_APP
+      register: ec2_instances
+    - name: Terminate instances
+      amazon.aws.ec2_instance:
+        region: us-west-2
+        instance_ids: "{{ ec2_instances.instances | map(attribute='instance_id') }}"
+        state: terminated
+      when: ec2_instances.instances | length > 0

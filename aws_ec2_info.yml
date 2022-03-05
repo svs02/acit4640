@@ -1,0 +1,8 @@
+---
+- name: EC2 instance
+  amazon.aws.ec2_instance_info:
+    region: us-west-2
+    filters:
+      instance-state-name: running
+      "tag:Name": ACIT4640_APP
+  register: ec2_instances
