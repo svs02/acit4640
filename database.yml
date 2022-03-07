@@ -1,0 +1,57 @@
+---
+- name:  Week 7 EC2 SECGRP_DB
+  amazon.aws.ec2_group:
+    name: "{{AWS_PREFIX}}_SECGRP_DB"
+    region: "{{ region }}"
+    description: Security group for app - SSH and HTTP wide open
+    vpc_id: "{{ aws_vpc_info.vpc.id }}"
+    rules:
+      - proto: tcp
+        ports:
+          - 22
+        cidr_ip: 0.0.0.0/0
+      - proto: tcp
+        ports:
+          - 3306
+        cidr_ip: "{{ subnet_cidr }}"
+  register: secrp_db  
+
+- name:  Week 7 EC2 SECGRP_APP
+  amazon.aws.ec2_group:
+      name: "{{ AWS_PREFIX }}_SECGRP_APP"
+      region: "{{ region }}"
+      description: Security group for app - SSH and HTTP wide open
+      vpc_id: "{{ aws_vpc_info.vpc.id }}"
+      rules:
+        - proto: tcp
+          ports:
+            - 22
+            - 80
+  register: secrp_app
+
+- name: Import EC2
+  import_tasks: aws_ec2.yml
+  tags: 
+    - provision
+
+- name: aws
+  amazon.aws.ec2_instance:
+    region: us-west-2
+    name: "{{ AWS_PREFIX }}_{{item.name}}"
+    key_name: ACIT4640_KEY
+    vpc_subnet_id: "{{ aws_subnets.subnets[0].id }}"
+    instance_type: t2.micro
+    security_group: "{{ aws_groups.security_groups[0].group_id }}"
+    image_id: ami-08675cddb6910220a
+    tags:
+      Course: "{{ AWS_PREFIX }}"
+      Role: "{{ item.name }}"
+    network:
+      assign_public_ip: true
+  register: ec2_instance_data
+  tags:
+    - provision  
+  loop:
+    - { group: database, name: DB }
+    - { group: database, name: APP }
+

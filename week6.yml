@@ -4,7 +4,8 @@
   tasks:
     - name: Import EC2
       import_tasks: aws_ec2.yml
-      tags: provision
+      tags: 
+        - provision
       when: aws_ec2_instances.instance[0] is not defined
     - name: Get EC2 Info
       import_tasks: aws_ec2_info.yml

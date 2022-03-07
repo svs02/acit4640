@@ -1,0 +1,134 @@
+---
+- hosts: localhost
+  gather_facts: no
+  tasks:
+    - name: export key valuse
+      shell: "echo {{ item }}"
+      loop:
+          - export AWS_ACCESS_KEY_ID=AKIAZTKWABYE3TBE3SER
+          - export AWS_SECRET_ACCESS_KEY=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
+          - export AWS_REGION=us-west-2
+    - name: Import EC2
+      import_tasks: aws_ec2.yml
+      tags: 
+        - provision
+      when: aws_ec2_instances.instance[0] is not defined
+    - name: Get EC2 Info
+      import_tasks: aws_ec2_info.yml
+      tags:
+        - provision
+    - name: Import infrastructure
+      import_tasks: aws_infra.yml
+      tags: 
+        - provision
+      when: aws_vpcs is not defined
+    - name: Get VPC Info
+      import_tasks: aws_vpc_info.yml
+      tags:
+        - provision
+
+- hosts: aws_ec2
+  tasks:
+    - name: Wait For EC2
+      wait_for_connection:
+        timeout: 300
+    - name: Import app
+      import_tasks: deploy.yml
+      tags: provision
+    - name: Query database
+      mysql_query:
+        login_user: backend
+        login_password: password
+        login_db: example
+        query: SELECT * FROM item WHERE bcit_id = %s
+        positional_args:
+          - A01075902
+      register: mysql_select
+      tags: provision
+    - name: Create user
+      mysql_query:
+        login_unix_socket: /var/run/mysqld/mysqld.sock
+        login_user: backend
+        login_password: password
+        login_db: example
+        query: INSERT INTO item (bcit_id, name) VALUES (%s, %s)
+        positional_args:
+          - A01075902
+          - Luke_Lee
+      tags: provision
+      when:
+      - mysql_select.rowcount[0] == 0
+
+- hosts: localhost
+  tasks:
+    - name: URL Info
+      import_tasks: aws_ec2_url.yml
+      tags: info
+    # - name: Destroy EC2
+    #   import_tasks: aws_ec2_terminate.yml
+    #   tags: destroy
+
+- hosts: localhost
+  gather_facts: no
+  vars:
+    AWS_PREFIX: ACIT4640
+    vpc_cidr: 10.100.0.0/16
+    subnet_cidr: 10.100.10.0/24
+    region: us-west-2
+  tasks:
+    - name: week7 application.yml 
+      import_tasks: application.yml
+      tags: infra
+    - name: week7 database.yml
+      import_tasks: database.yml
+      tags: infra
+
+- hosts: service_DB
+  tasks:
+    - name: Wait For EC2
+      wait_for_connection:
+        timeout: 300
+    - name: Change line in file
+      become: true
+      lineinfile:
+        path: /etc/mysql/mysql.conf.d/mysqld.cnf
+        line: "bind-address = 0.0.0.0"
+        regexp: "bind-address = 127.0.0.1"
+    - name: restart backend service
+      become: true
+      systemd:
+        name: backend
+        daemon_reload: yes
+        state: restarted
+    - mysql_query:
+        login_user: backend
+        login_password: password
+        login_db: example
+        query: SELECT * FROM item WHERE bcit_id = %s
+        positional_args:
+          - A01075902
+
+- hosts: service_APP
+  tasks:
+    - name: Wait For EC2
+      wait_for_connection:
+        timeout: 300
+    - name: Change line in file
+      become: true
+      lineinfile:
+        path: /etc/mysql/mysql.conf.d/mysqld.cnf
+        line: "bind-address = 0.0.0.0"
+        regexp: "bind-address = 127.0.0.1"
+    - name: restart backend service
+      become: true
+      systemd:
+        name: backend
+        daemon_reload: yes
+        state: restarted
+    - mysql_query:
+        login_user: backend
+        login_password: password
+        login_db: example
+        query: SELECT * FROM item WHERE bcit_id = %s
+        positional_args:
+          - A01075902

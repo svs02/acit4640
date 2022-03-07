@@ -16,12 +16,14 @@
   register: aws_subnet_info
 - name: Internet gateway
   ec2_vpc_igw:
-      vpc_id: "{{ aws_vpc_info.vpc.id }}"
-      tags:
+        region: us-west-2
+        vpc_id: "{{ aws_vpc_info.vpc.id }}"
+        tags:
               Name: ACIT4640_IGW
   register: aws_igw_info
 - name: Route table
   amazon.aws.ec2_vpc_route_table:
+          region: us-west-2
           subnets:
                   - "{{ aws_subnet_info.subnet.id }}"
           routes:
@@ -32,6 +34,7 @@
                   Name: ACIT4640_RTBL
 - name: Security group
   amazon.aws.ec2_group:
+          region: us-west-2
           name: ACIT4640_SECGRP
           description: Security group for Week4 - SSH and HTTP wide open
           vpc_id: "{{ aws_vpc_info.vpc.id }}"
