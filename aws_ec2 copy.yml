@@ -1,0 +1,32 @@
+---
+- name: VPC info
+  amazon.aws.ec2_vpc_net_info:
+    region: us-west-2
+    filters:
+      "tag:Name": ACIT4640_AUTO
+  register: vpcs
+- name: get subnet info
+  amazon.aws.ec2_vpc_subnet_info:
+    region: us-west-2
+    filters:
+      "tag:Name": ACIT4640_SUBNET
+      vpc-id: "{{ vpcs.vpcs[0].id }}"
+  register: aws_subnets
+- name: get security group info
+  amazon.aws.ec2_group_info:
+    region: us-west-2
+    filters:
+      group-name: ACIT4640_SECGRP
+      vpc-id: "{{ vpcs.vpcs[0].id }}"
+  register: aws_groups
+- name: EC2 instance
+  amazon.aws.ec2_instance:
+    region: us-west-2
+    name: ACIT4640_APP
+    vpc_subnet_id: "{{ aws_subnets.subnets[0].id }}"
+    instance_type: t2.micro
+    security_group: "{{ aws_groups.security_groups[0].group_id }}"
+    key_name: ACIT4640_KEY
+    image_id: ami-08675cddb6910220a
+    network:
+      assign_public_ip: true

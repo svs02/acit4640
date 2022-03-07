@@ -1,0 +1,46 @@
+---
+- hosts: localhost
+  gather_facts: yes
+  vars:
+    AWS_PREFIX: ACIT4640
+    vpc_cidr: 10.42.0.0/16
+    subnet_cidr: 10.42.10.0/24
+    subnet_b_cidr: 10.42.20.0/24
+    region: us-west-2
+  tasks:
+    - name: Create infra
+      import_tasks: aws_infra.yml
+      tags: provision
+    - name: Create RDS infra
+      include_tasks: aws_rds.yml
+      tags: provision
+    - name: Create EC2 infra
+      include_tasks: aws_ec2.yml
+      tags: provision
+    - name: Get info about RDS
+      include_tasks: aws_rds.yml
+      tags: info
+    - name: debug RDS info
+      debug: { var: aws_rds_info }
+      tags: info
+    - name: debug RDS info
+      debug: { msg: "DB address: {{ aws_rds_info.instances[0].endpoint.address }}" }
+      tags: info
+    - name: refresh inventory
+      meta: refresh_inventory
+      tags: [ provision, destroy ]
+
+- hosts: service_APP
+  gather_facts: yes
+  vars:
+    db_name: backend
+    db_username: example
+    db_password: password
+  tasks:
+    - name: define address for database
+      set_fact:
+        # db_host: "{{ hostvars.localhost.aws_rds_info.instances[0].endpoint.address }}"
+        db_host: "acit4640-db.cflnu4d6paym.us-west-2.rds.amazonaws.com"
+      tags: provision
+    - import_tasks: application.yml
+      tags: provision

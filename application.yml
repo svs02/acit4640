@@ -1,57 +1,145 @@
----
-- name:  Week 7 EC2 SECGRP_DB
-  amazon.aws.ec2_group:
-    name: "{{AWS_PREFIX}}_SECGRP_DB"
-    region: "{{ region }}"
-    description: Security group for app - SSH and HTTP wide open
-    vpc_id: "{{ aws_vpc_info.vpc.id }}"
-    rules:
-      - proto: tcp
-        ports:
-          - 22
-        cidr_ip: 0.0.0.0/0
-      - proto: tcp
-        ports:
-          - 3306
-        cidr_ip: "{{ subnet_cidr }}"
-  register: secrp_db  
+- name: Installing software
+  become: true
+  apt:
+    name:
+      - nginx
+      - unzip
+      - python3
+      - python3-pip
+      - libmysqlclient-dev
+      - mysql-server
+    update_cache: yes
+- name: adding backend user
+  become: true
+  user:
+    name: backend
+- name: download the code
+  get_url:
+    url: https://github.com/timoguic/acit4640-py-mysql/archive/refs/heads/master.zip
+    dest: /tmp/source.zip
+- name: create tmp directory for course code
+  file:
+    path: /tmp/code
+    state: directory
 
-- name:  Week 7 EC2 SECGRP_APP
-  amazon.aws.ec2_group:
-      name: "{{ AWS_PREFIX }}_SECGRP_APP"
-      region: "{{ region }}"
-      description: Security group for app - SSH and HTTP wide open
-      vpc_id: "{{ aws_vpc_info.vpc.id }}"
-      rules:
-        - proto: tcp
-          ports:
-            - 22
-            - 80
-  register: secrp_app
+- name: unzip the code archive
+  unarchive:
+    remote_src: yes
+    src: /tmp/source.zip
+    dest: /tmp/code
+- name: create a directory for frontend files
+  become: true
+  file:
+    path: /frontend
+    state: directory
+    owner: "{{ ansible_ssh_user }}"
+- name: set up frontend files
+  copy:
+    src: /tmp/code/acit4640-py-mysql-master/frontend/index.html
+    dest: /frontend/index.html
+    remote_src: yes
 
-- name: Import EC2
-  import_tasks: aws_ec2.yml
-  tags: 
-    - provision
-- name: aws
-  amazon.aws.ec2_instance:
-    region: us-west-2
-    name: "{{ AWS_PREFIX }}_{{item.name}}"
-    key_name: ACIT4640_KEY
-    vpc_subnet_id: "{{ aws_subnets.subnets[0].id }}"
-    instance_type: t2.micro
-    security_group: "{{ aws_groups.security_groups[0].group_id }}"
-    image_id: ami-08675cddb6910220a
-    tags:
-      Course: "{{ AWS_PREFIX }}"
-      Role: "{{ item.name }}"
-    network:
-      assign_public_ip: true
-  register: ec2_instance_data
-  tags:
-    - provision
-  loop:
-    - { group: application, name: DB }
-    - { group: application, name: APP }
+- name: copy nginx.conf to instance
+  become: true
+  copy:
+    src: nginx-default
+    dest: /etc/nginx/sites-available/default
+- name: restart nginx
+  become: true
+  systemd:
+    name: nginx
+    state: restarted
+- name: create a directory for backend files
+  become: true
+  file:
+    path: /backend
+    state: directory
+    owner: backend
+- name: set up backend files
+  become: true
+  become_user: root
+  copy:
+    src: /tmp/code/acit4640-py-mysql-master/backend/
+    dest: /backend/
+    owner: "{{ ansible_ssh_user }}"
+    remote_src: yes
+- name: pip install python dependencies
+  become: true
+  pip:
+    requirements: /backend/requirements.txt
+- name: Install PyMySql
+  become: true
+  pip:
+    name: PyMySql
+    state: present
+- name: copy backend config file
+  become: true
+  copy:
+    src: backend-conf
+    dest: /backend/backend.conf
 
-        
+- name: create backend database
+  become: true
+  mysql_db:
+    login_unix_socket: /var/run/mysqld/mysqld.sock
+    login_user: root
+    name: example
+- name: create mysql backend user
+  become: true
+  community.mysql.mysql_user:
+    login_unix_socket: /var/run/mysqld/mysqld.sock
+    login_user: root
+    name: backend
+    password: password
+    priv: "example.*:ALL,GRANT"
+    state: present
+- name: copy service file
+  become: true
+  copy:
+    src: backend.service
+    dest: /etc/systemd/system/backend.service
+- name: restart backend service
+  become: true
+  systemd:
+    name: backend
+    daemon_reload: yes
+    state: restarted
+
+- become: true
+  pip:
+    name: mysqlclient
+- become: true
+  become_user: backend
+  pip:
+    requirements: /backend/requirements.txt
+- name: adjust backend setting
+  become: true
+  become_user: backend
+  template:
+    src: files/backend.conf.j2
+    dest: /backend/backend.conf
+- name: start backend
+  become: true
+  systemd:
+    name: backend
+    state: restarted
+    daemon_reload: yes
+- mysql_query:
+    login_host: "{{ db_host }}"
+    login-user: "{{ db_username }}"
+    login_password: "{{ db_password }}"
+    login_db: "{{ db_name }}"
+    query: SELECT * FROM item WHERE bcit_id = %s
+    positional_args:
+      - A01075902
+  register: mysql_select
+- mysql_query:
+    login_host: "{{ db_host }}"
+    login-user: "{{ db_username }}"
+    login_password: "{{ db_password }}"
+    login_db: "{{ db_name }}"
+    query: INSTERT INTO item (bcit_id, name) VALUES (%s, %s)
+    positional_args:
+      - A01075902
+  register: mysql_insert
+  
